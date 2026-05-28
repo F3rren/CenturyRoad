@@ -37,3 +37,17 @@ pnpm-debug.log*
 
 # Cache
 .eslintcache
+.tsbuildinfo
+*.tsbuildinfo
+
+# Vite
+.vite/
+
+# Test coverage
+coverage/
+
+# Storybook
+storybook-static/
+
+# Misc
+*.local
