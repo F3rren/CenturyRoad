@@ -4,16 +4,16 @@ services:
   db:
     image: postgis/postgis:16-3.4-alpine
     environment:
-      POSTGRES_DB:       ${POSTGRES_DB:-centuryroad}
-      POSTGRES_USER:     ${POSTGRES_USER:-centuryroad}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-centuryroad}
+      POSTGRES_DB:       ${POSTGRES_DB}
+      POSTGRES_USER:     ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./infra/postgres/init-postgis.sql:/docker-entrypoint-initdb.d/10-postgis.sql:ro
     ports:
       - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-centuryroad} -d ${POSTGRES_DB:-centuryroad}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -26,11 +26,11 @@ services:
       dockerfile: Dockerfile
       target: prod
     environment:
-      SPRING_PROFILES_ACTIVE:       prod
-      SPRING_DATASOURCE_URL:        jdbc:postgresql://db:5432/${POSTGRES_DB:-centuryroad}
-      SPRING_DATASOURCE_USERNAME:   ${POSTGRES_USER:-centuryroad}
-      SPRING_DATASOURCE_PASSWORD:   ${POSTGRES_PASSWORD:-centuryroad}
-      JWT_SECRET:                   ${JWT_SECRET:-change-me-in-production-use-32-chars}
+      SPRING_PROFILES_ACTIVE:     prod
+      SPRING_DATASOURCE_URL:      jdbc:postgresql://db:5432/${POSTGRES_DB}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      JWT_SECRET:                 ${JWT_SECRET}
     ports:
       - "8080:8080"
     depends_on:
@@ -50,7 +50,7 @@ services:
 
   # ─── Prometheus ──────────────────────────────────────────────────────────────
   prometheus:
-    image: prom/prometheus:v2.53.0
+    image: prom/prometheus:${PROMETHEUS_VERSION}
     volumes:
       - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
@@ -65,10 +65,10 @@ services:
 
   # ─── Grafana ─────────────────────────────────────────────────────────────────
   grafana:
-    image: grafana/grafana:11.1.0
+    image: grafana/grafana:${GRAFANA_VERSION}
     environment:
-      GF_SECURITY_ADMIN_USER:     ${GRAFANA_USER:-admin}
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_SECURITY_ADMIN_USER:     ${GRAFANA_USER}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD}
       GF_USERS_ALLOW_SIGN_UP:     "false"
     volumes:
       - grafana_data:/var/lib/grafana
