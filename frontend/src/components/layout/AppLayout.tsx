@@ -13,7 +13,7 @@ export function AppLayout() {
       <Sidebar open={sidebarOpen} />
       <div className="flex flex-1 flex-col overflow-hidden">
         <Header onMenuToggle={() => setSidebarOpen((v) => !v)} />
-        <main className="flex-1 overflow-y-auto p-6">
+        <main className="flex-1 overflow-hidden">
           <Outlet />
         </main>
       </div>
