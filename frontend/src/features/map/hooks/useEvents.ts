@@ -52,5 +52,15 @@ export function useEvents(countryCode: string | null | undefined) {
     return { all, past, upcoming };
   }, [countryCode, today]);
 
-  return { globalEvents, countryFiltered, todayEvents, today };
+  const countryHeatmap = useMemo(() => {
+    const counts: Record<string, number> = {};
+    MOCK_EVENTS.filter(
+      (e) => e.month === today.month && e.day === today.day,
+    ).forEach((e) => {
+      counts[e.countryCode] = (counts[e.countryCode] ?? 0) + 1;
+    });
+    return counts;
+  }, [today]);
+
+  return { globalEvents, countryFiltered, todayEvents, today, countryHeatmap };
 }

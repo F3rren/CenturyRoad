@@ -7,15 +7,48 @@ const STYLE_URL = 'https://tiles.openfreemap.org/styles/positron';
 const COUNTRIES_GEOJSON =
   'https://d2ad6b4ur7yvpq.cloudfront.net/naturalearth-3.3.0/ne_110m_admin_0_countries.geojson';
 
+// ── Heat map helpers ─────────────────────────────────────────────────────────
+
+function heatColor(count: number): string {
+  if (count >= 6) return '#ef4444'; // rosso
+  if (count >= 3) return '#eab308'; // giallo
+  return '#22c55e';                  // verde
+}
+
+function buildHeatExpression(
+  heatmap: Record<string, number>,
+): maplibregl.ExpressionSpecification {
+  const entries = Object.entries(heatmap);
+  if (!entries.length) {
+    return 'rgba(0,0,0,0)' as unknown as maplibregl.ExpressionSpecification;
+  }
+  return [
+    'match',
+    ['get', 'iso_a2'],
+    ...entries.flatMap(([code, count]) => [code, heatColor(count)]),
+    'rgba(0,0,0,0)',
+  ] as maplibregl.ExpressionSpecification;
+}
+
+// ── Component ────────────────────────────────────────────────────────────────
+
 interface MapViewProps {
   projection: ProjectionType;
   onCountryClick?: (country: Country) => void;
   selectedCountryCode?: string | null;
+  countryHeatmap?: Record<string, number>;
 }
 
-export function MapView({ projection, onCountryClick, selectedCountryCode }: MapViewProps) {
+export function MapView({
+  projection,
+  onCountryClick,
+  selectedCountryCode,
+  countryHeatmap,
+}: MapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
+  // Ref avoids stale-closure issue in the once('load') callback
+  const heatmapRef = useRef<Record<string, number>>(countryHeatmap ?? {});
 
   // Init once on mount
   useEffect(() => {
@@ -40,13 +73,23 @@ export function MapView({ projection, onCountryClick, selectedCountryCode }: Map
     );
 
     map.once('load', () => {
-      // Country polygons for click detection
       map.addSource('countries-ne', {
         type: 'geojson',
         data: COUNTRIES_GEOJSON,
       });
 
-      // Transparent fill layer used only for click/hover targeting
+      // 1. Heatmap fill (colori verde/giallo/rosso)
+      map.addLayer({
+        id: 'countries-heat',
+        type: 'fill',
+        source: 'countries-ne',
+        paint: {
+          'fill-color': buildHeatExpression(heatmapRef.current),
+          'fill-opacity': 0.8,
+        },
+      });
+
+      // 2. Transparent fill for click detection
       map.addLayer({
         id: 'countries-fill',
         type: 'fill',
@@ -54,21 +97,21 @@ export function MapView({ projection, onCountryClick, selectedCountryCode }: Map
         paint: { 'fill-color': 'transparent', 'fill-opacity': 0 },
       });
 
-      // Highlight layer — filtered to the selected country
+      // 3. Blue highlight for selected country
       map.addLayer({
         id: 'countries-highlight',
         type: 'fill',
         source: 'countries-ne',
-        filter: ['==', 'ISO_A2', ''],
-        paint: { 'fill-color': '#3b82f6', 'fill-opacity': 0.25 },
+        filter: ['==', 'iso_a2', ''],
+        paint: { 'fill-color': '#3b82f6', 'fill-opacity': 0.3 },
       });
 
-      // Country border for selected state
+      // 4. Border for selected country
       map.addLayer({
         id: 'countries-outline',
         type: 'line',
         source: 'countries-ne',
-        filter: ['==', 'ISO_A2', ''],
+        filter: ['==', 'iso_a2', ''],
         paint: { 'line-color': '#3b82f6', 'line-width': 1.5 },
       });
 
@@ -76,9 +119,8 @@ export function MapView({ projection, onCountryClick, selectedCountryCode }: Map
         const feature = e.features?.[0];
         if (!feature) return;
         const props = feature.properties as Record<string, string>;
-        const code = props['ISO_A2'] ?? props['iso_a2'] ?? '';
-        const name =
-          props['NAME_EN'] ?? props['NAME'] ?? props['ADMIN'] ?? props['name'] ?? '';
+        const code = props['iso_a2'] ?? '';
+        const name = props['name'] ?? props['admin'] ?? '';
         if (code && name) onCountryClick?.({ name, code });
       });
 
@@ -106,15 +148,27 @@ export function MapView({ projection, onCountryClick, selectedCountryCode }: Map
     else map.once('styledata', apply);
   }, [projection]);
 
-  // Sync country highlight
+  // Sync country highlight (selected)
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !map.isStyleLoaded()) return;
     const code = selectedCountryCode ?? '';
-    const filter: maplibregl.FilterSpecification = ['==', 'ISO_A2', code];
+    const filter: maplibregl.FilterSpecification = ['==', 'iso_a2', code];
     if (map.getLayer('countries-highlight')) map.setFilter('countries-highlight', filter);
     if (map.getLayer('countries-outline')) map.setFilter('countries-outline', filter);
   }, [selectedCountryCode]);
+
+  // Sync heatmap colors
+  useEffect(() => {
+    heatmapRef.current = countryHeatmap ?? {};
+    const map = mapRef.current;
+    if (!map || !map.getLayer('countries-heat')) return;
+    map.setPaintProperty(
+      'countries-heat',
+      'fill-color',
+      buildHeatExpression(heatmapRef.current),
+    );
+  }, [countryHeatmap]);
 
   return (
     <div

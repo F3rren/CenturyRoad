@@ -145,4 +145,30 @@ export const MOCK_EVENTS: HistoricalEvent[] = [
     description: "Mohandas Gandhi viene ucciso a New Delhi da un estremista indù.",
     importance: 'high', category: 'politics', coordinates: [77.209, 28.6139],
   },
+
+  // ── 30 maggio – eventi per il demo della heatmap ─────────────────────────
+  {
+    id: '25', title: 'Inaugurazione del Lincoln Memorial', year: 1922, month: 5, day: 30,
+    countryCode: 'US', countryName: 'USA',
+    description: 'Il Lincoln Memorial di Washington D.C. viene inaugurato alla presenza di migliaia di persone.',
+    importance: 'high', category: 'culture', coordinates: [-77.0502, 38.8893],
+  },
+  {
+    id: '26', title: 'Lancio della sonda Mariner 9', year: 1971, month: 5, day: 30,
+    countryCode: 'US', countryName: 'USA',
+    description: 'La NASA lancia Mariner 9, prima sonda a orbitare attorno a Marte.',
+    importance: 'high', category: 'science', coordinates: [-80.6077, 28.6024],
+  },
+  {
+    id: '27', title: 'Dust Bowl – La grande tempesta di polvere', year: 1934, month: 5, day: 30,
+    countryCode: 'US', countryName: 'USA',
+    description: 'Una delle più devastanti tempeste di polvere della storia travolge le Grandi Pianure americane.',
+    importance: 'high', category: 'disaster', coordinates: [-99.0, 35.5],
+  },
+  {
+    id: '28', title: 'Dichiarazione di indipendenza del Biafra', year: 1967, month: 5, day: 30,
+    countryCode: 'NG', countryName: 'Nigeria',
+    description: 'Il colonnello Ojukwu proclama la Repubblica del Biafra, dando inizio alla sanguinosa guerra civile nigeriana.',
+    importance: 'high', category: 'war', coordinates: [7.4913, 5.0510],
+  },
 ];
