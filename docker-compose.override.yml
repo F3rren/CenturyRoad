@@ -1,0 +1,29 @@
+# Applied automatically in dev (docker compose up).
+# Overrides prod targets with hot-reload mounts and dev profiles.
+services:
+
+  backend:
+    build:
+      target: dev
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+    volumes:
+      - ./backend:/app
+      - maven_cache:/root/.m2
+    ports:
+      - "8080:8080"
+      - "5005:5005"   # remote debug
+
+  frontend:
+    build:
+      target: dev
+    environment:
+      BACKEND_URL: ${BACKEND_URL}
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules   # isolate container node_modules from host
+    ports:
+      - "5173:5173"
+
+volumes:
+  maven_cache:
