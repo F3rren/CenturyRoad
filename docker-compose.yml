@@ -37,17 +37,6 @@ services:
       db:
         condition: service_healthy
 
-  # ─── Frontend ────────────────────────────────────────────────────────────────
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      target: prod
-    ports:
-      - "80:80"
-    depends_on:
-      - backend
-
   # ─── Prometheus ──────────────────────────────────────────────────────────────
   prometheus:
     image: prom/prometheus:${PROMETHEUS_VERSION}

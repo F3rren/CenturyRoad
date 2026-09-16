@@ -55,27 +55,3 @@ jobs:
             backend/target/surefire-reports
             backend/target/failsafe-reports
           if-no-files-found: ignore
-
-  frontend:
-    name: Frontend build and lint
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Install dependencies
-        run: cd frontend && npm ci
-
-      - name: Lint
-        run: cd frontend && npm run lint
-
-      - name: Type-check and build
-        run: cd frontend && npm run build
