@@ -1,4 +1,4 @@
-name: Java CI
+name: Dependency Scan
 
 on:
   push:
@@ -11,14 +11,17 @@ on:
       - main
       - develop
 
+  schedule:
+    - cron: '0 4 * * 1'
+
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  build-test-quality:
-    name: Build, test and quality
+  dependency-check:
+    name: Scan Maven dependencies
     runs-on: ubuntu-latest
 
     steps:
@@ -35,23 +38,19 @@ jobs:
       - name: Make Maven Wrapper executable
         run: chmod +x mvnw
 
-      - name: Build, test and quality checks
-        run: ./mvnw --batch-mode --errors --fail-at-end clean verify
+      - name: Run OWASP Dependency-Check
+        run: |
+          ./mvnw --batch-mode verify \
+            -DskipTests \
+            org.owasp:dependency-check-maven:check \
+            -DfailBuildOnCVSS=7
 
-      - name: Upload JaCoCo report
+      - name: Upload OWASP report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: jacoco-report
-          path: target/site/jacoco
-          if-no-files-found: ignore
-
-      - name: Upload Maven test reports
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: maven-test-reports
+          name: owasp-dependency-check-report
           path: |
-            target/surefire-reports
-            target/failsafe-reports
+            target/dependency-check-report.html
+            target/dependency-check-report.json
           if-no-files-found: ignore
