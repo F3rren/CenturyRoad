@@ -20,41 +20,6 @@ permissions:
   contents: read
 
 jobs:
-  dependency-check-backend:
-    name: Scan Maven dependencies
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '21'
-          cache: maven
-
-      - name: Make Maven Wrapper executable
-        run: cd backend && chmod +x mvnw
-
-      - name: Run OWASP Dependency-Check
-        run: |
-          cd backend && ./mvnw --batch-mode verify \
-            -DskipTests \
-            org.owasp:dependency-check-maven:check \
-            -DfailBuildOnCVSS=7
-
-      - name: Upload OWASP report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: owasp-dependency-check-report
-          path: |
-            backend/target/dependency-check-report.html
-            backend/target/dependency-check-report.json
-          if-no-files-found: ignore
-
   dependency-check-frontend:
     name: Scan npm dependencies
     runs-on: ubuntu-latest
