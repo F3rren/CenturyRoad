@@ -1,4 +1,4 @@
-name: Java CI
+name: CI
 
 on:
   push:
@@ -17,8 +17,8 @@ permissions:
   contents: read
 
 jobs:
-  build-test-quality:
-    name: Build, test and quality
+  backend:
+    name: Backend build, test and quality
     runs-on: ubuntu-latest
 
     steps:
@@ -33,17 +33,17 @@ jobs:
           cache: maven
 
       - name: Make Maven Wrapper executable
-        run: chmod +x mvnw
+        run: cd backend && chmod +x mvnw
 
       - name: Build, test and quality checks
-        run: ./mvnw --batch-mode --errors --fail-at-end clean verify
+        run: cd backend && ./mvnw --batch-mode --errors --fail-at-end clean verify
 
       - name: Upload JaCoCo report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: jacoco-report
-          path: target/site/jacoco
+          path: backend/target/site/jacoco
           if-no-files-found: ignore
 
       - name: Upload Maven test reports
@@ -52,6 +52,30 @@ jobs:
         with:
           name: maven-test-reports
           path: |
-            target/surefire-reports
-            target/failsafe-reports
+            backend/target/surefire-reports
+            backend/target/failsafe-reports
           if-no-files-found: ignore
+
+  frontend:
+    name: Frontend build and lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: cd frontend && npm ci
+
+      - name: Lint
+        run: cd frontend && npm run lint
+
+      - name: Type-check and build
+        run: cd frontend && npm run build
