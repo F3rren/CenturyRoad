@@ -26,7 +26,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * mocked run would not really exercise.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@Import(TestcontainersConfiguration.class)
+@Import({TestcontainersConfiguration.class, RestTemplateTestConfiguration.class})
 @ActiveProfiles("test")
 class AuthControllerTest {
 
