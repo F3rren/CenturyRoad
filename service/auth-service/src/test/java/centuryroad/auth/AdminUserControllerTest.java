@@ -31,7 +31,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * the password never appears, in a list of many users just as much as in a single one.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@Import(TestcontainersConfiguration.class)
+@Import({TestcontainersConfiguration.class, RestTemplateTestConfiguration.class})
 @ActiveProfiles("test")
 class AdminUserControllerTest {
 
@@ -141,6 +141,39 @@ class AdminUserControllerTest {
 
         assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(login("user@test.it", "user-password")).isNotBlank();
+    }
+
+    @Test
+    void creatingAUserWithAnEmailThatAlreadyExistsIsAConflict() {
+        ResponseEntity<String> resp = call("/api/admin/users", HttpMethod.POST, adminToken,
+                Map.of("email", "user@test.it", "password", "una-password-lunga", "role", "user"));
+
+        assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+    }
+
+    @Test
+    void aTooShortPasswordIsRejectedBeforeTheUserIsEverWritten() {
+        ResponseEntity<String> resp = call("/api/admin/users", HttpMethod.POST, adminToken,
+                Map.of("email", "nuovo3@test.it", "password", "corta", "role", "user"));
+
+        assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(userRepository.findByEmail("nuovo3@test.it")).isEmpty();
+    }
+
+    @Test
+    void aMalformedEmailIsRejected() {
+        ResponseEntity<String> resp = call("/api/admin/users", HttpMethod.POST, adminToken,
+                Map.of("email", "non-e-una-email", "password", "una-password-lunga", "role", "user"));
+
+        assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
+    @Test
+    void renamingAUserOntoAnEmailAlreadyTakenIsAConflict() {
+        ResponseEntity<String> resp = call("/api/admin/users/" + regularUserId, HttpMethod.PUT, adminToken,
+                Map.of("email", "admin@test.it", "role", "user"));
+
+        assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
     }
 
     @Test

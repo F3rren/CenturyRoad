@@ -25,7 +25,9 @@ class GatewayRoutingTest {
 	private static final DisposableServer authServiceStub = HttpServer.create()
 			.port(0)
 			.route(routes -> routes.get("/**",
-					(req, res) -> res.header("X-Upstream", "auth-service").sendString(Mono.just("auth-service-stub"))))
+					(req, res) -> res.header("X-Upstream", "auth-service")
+							.header("X-Upstream-Path", req.uri())
+							.sendString(Mono.just("auth-service-stub"))))
 			.bindNow();
 
 	@LocalServerPort
@@ -62,10 +64,37 @@ class GatewayRoutingTest {
 	}
 
 	@Test
+	void routesMePathToAuthService() {
+		client().get().uri("/api/me")
+				.exchange()
+				.expectStatus().isOk()
+				.expectHeader().valueEquals("X-Upstream", "auth-service");
+	}
+
+	@Test
 	void unmatchedApiPathHasNoRoute() {
 		client().get().uri("/api/events/123")
 				.exchange()
 				.expectStatus().isEqualTo(HttpStatus.NOT_FOUND);
+	}
+
+	@Test
+	void anotherAdminPathIsNotForwardedJustBecauseItStartsWithApiAdmin() {
+		// The predicate is /api/admin/users/**, not /api/admin/**: a future admin area
+		// belonging to a different service must not be swallowed by this route.
+		client().get().uri("/api/admin/settings")
+				.exchange()
+				.expectStatus().isEqualTo(HttpStatus.NOT_FOUND);
+	}
+
+	@Test
+	void thePathReachesTheUpstreamUnmodified() {
+		// auth-service serves its real /api/... paths, so the gateway deliberately has no
+		// path-stripping filter - see the routes comment in application.properties.
+		client().get().uri("/api/auth/login")
+				.exchange()
+				.expectStatus().isOk()
+				.expectHeader().valueEquals("X-Upstream-Path", "/api/auth/login");
 	}
 
 }

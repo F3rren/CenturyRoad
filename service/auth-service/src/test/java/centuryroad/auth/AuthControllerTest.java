@@ -53,11 +53,15 @@ class AuthControllerTest {
     }
 
     private void save(String email, String rawPassword, Role role) {
+        save(email, rawPassword, role, true);
+    }
+
+    private void save(String email, String rawPassword, Role role, boolean enabled) {
         User u = new User();
         u.setEmail(email);
         u.setPassword(passwordEncoder.encode(rawPassword));
         u.setRole(role);
-        u.setEnabled(true);
+        u.setEnabled(enabled);
         u.setCreatedAt(OffsetDateTime.now());
         userRepository.save(u);
     }
@@ -95,6 +99,21 @@ class AuthControllerTest {
         assertThat(wrongPassword.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
         assertThat(unknownEmail.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
         assertThat(bodyOf(wrongPassword).get("error")).isEqualTo(bodyOf(unknownEmail).get("error"));
+    }
+
+    @Test
+    void aDisabledUserIsRefusedEvenWithTheRightPassword() throws Exception {
+        save("disabled@test.it", "password-di-prova", Role.USER, false);
+
+        ResponseEntity<String> disabled = rest.postForEntity("/api/auth/login",
+                Map.of("email", "disabled@test.it", "password", "password-di-prova"), String.class);
+        ResponseEntity<String> unknownEmail = rest.postForEntity("/api/auth/login",
+                Map.of("email", "nobody@test.it", "password", "whatever12"), String.class);
+
+        assertThat(disabled.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        // Same answer as an address that does not exist: whether an account is merely
+        // disabled is not something an anonymous caller gets to find out.
+        assertThat(bodyOf(disabled).get("error")).isEqualTo(bodyOf(unknownEmail).get("error"));
     }
 
     @Test
