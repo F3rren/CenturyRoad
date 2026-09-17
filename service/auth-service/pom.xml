@@ -16,7 +16,7 @@
 
 	<properties>
 		<java.version>21</java.version>
-		<jjwt.version>0.12.6</jjwt.version>
+		<jjwt.version>0.13.0</jjwt.version>
 		<!-- Ahead of the 1.19.8 Spring Boot 3.3.4 manages. That release ships
 		     docker-java 3.3.6, which asks the daemon for Docker API 1.32; recent
 		     Docker Engine and Docker Desktop builds refuse anything that old and
