@@ -3,6 +3,7 @@ package centuryroad.auth;
 import centuryroad.auth.model.Role;
 import centuryroad.auth.model.User;
 import centuryroad.auth.repository.UserRepository;
+import centuryroad.auth.service.LoginAttemptLimiter;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -42,6 +43,8 @@ class AdminUserControllerTest {
     private PasswordEncoder passwordEncoder;
     @Autowired
     private ObjectMapper objectMapper;
+    @Autowired
+    private LoginAttemptLimiter loginAttemptLimiter;
 
     private String adminToken;
     private String userToken;
@@ -49,6 +52,9 @@ class AdminUserControllerTest {
 
     @BeforeEach
     void setUp() throws Exception {
+        // Every test here logs in during setup: see AuthControllerTest.setUp for why the
+        // limiter has to be cleared rather than just the database.
+        loginAttemptLimiter.clear();
         userRepository.deleteAll();
         save("admin@test.it", "admin-password", Role.ADMIN);
         String regularEmail = save("user@test.it", "user-password", Role.USER);

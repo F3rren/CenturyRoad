@@ -3,6 +3,7 @@ package centuryroad.auth;
 import centuryroad.auth.model.Role;
 import centuryroad.auth.model.User;
 import centuryroad.auth.repository.UserRepository;
+import centuryroad.auth.service.LoginAttemptLimiter;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -38,9 +39,15 @@ class AuthControllerTest {
     private PasswordEncoder passwordEncoder;
     @Autowired
     private ObjectMapper objectMapper;
+    @Autowired
+    private LoginAttemptLimiter loginAttemptLimiter;
 
     @BeforeEach
     void setUp() {
+        // The limiter is in-memory and shared by every test in this class, so without
+        // this the one test that trips it on purpose leaves every login that runs after
+        // it answered with 429 instead of what the test expects.
+        loginAttemptLimiter.clear();
         userRepository.deleteAll();
         save("user@test.it", "password-di-prova", Role.USER);
     }
