@@ -2,9 +2,9 @@
 FROM eclipse-temurin:21-jdk AS dev
 WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
-EXPOSE 8080 5005
+EXPOSE 8080 5007
 ENTRYPOINT ["./mvnw", "spring-boot:run", \
-  "-Dspring-boot.run.jvmArguments=-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005"]
+  "-Dspring-boot.run.jvmArguments=-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5007"]
 
 # ---- Build stage ----
 FROM eclipse-temurin:21-jdk AS build

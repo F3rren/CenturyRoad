@@ -2,7 +2,7 @@
 .env
 
 # Maven
-backend/target/
+service/*/target/
 
 # Node
 frontend/node_modules/

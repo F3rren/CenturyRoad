@@ -19,10 +19,10 @@ services:
       retries: 5
       start_period: 20s
 
-  # ─── Backend ─────────────────────────────────────────────────────────────────
-  backend:
+  # ─── Auth service ────────────────────────────────────────────────────────────
+  auth-service:
     build:
-      context: ./backend
+      context: ./service/auth-service
       dockerfile: Dockerfile
       target: prod
     environment:
@@ -31,11 +31,24 @@ services:
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
       JWT_SECRET:                 ${JWT_SECRET}
-    ports:
-      - "8080:8080"
+      JWT_EXPIRATION_MS:          ${JWT_EXPIRATION_MS}
     depends_on:
       db:
         condition: service_healthy
+
+  # ─── Gateway ─────────────────────────────────────────────────────────────────
+  gateway:
+    build:
+      context: ./service/gateway
+      dockerfile: Dockerfile
+      target: prod
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      AUTH_SERVICE_URI:       http://auth-service:8081
+    ports:
+      - "8080:8080"
+    depends_on:
+      - auth-service
 
   # ─── Prometheus ──────────────────────────────────────────────────────────────
   prometheus:
@@ -50,7 +63,8 @@ services:
     ports:
       - "9090:9090"
     depends_on:
-      - backend
+      - auth-service
+      - gateway
 
   # ─── Grafana ─────────────────────────────────────────────────────────────────
   grafana:
