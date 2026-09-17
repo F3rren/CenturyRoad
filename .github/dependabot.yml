@@ -2,14 +2,14 @@ version: 2
 
 updates:
   - package-ecosystem: maven
-    directory: "/backend"
+    directory: "/service/auth-service"
     target-branch: develop
     schedule:
       interval: weekly
     open-pull-requests-limit: 10
 
   - package-ecosystem: maven
-    directory: "/auth-service"
+    directory: "/service/gateway"
     target-branch: develop
     schedule:
       interval: weekly
