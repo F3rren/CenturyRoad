@@ -124,6 +124,13 @@
 			<artifactId>postgresql</artifactId>
 			<scope>test</scope>
 		</dependency>
+		<!-- TestRestTemplate's default JDK HttpURLConnection can't replay a streamed POST
+		     body to retry after a 401 response - see RestTemplateTestConfiguration. -->
+		<dependency>
+			<groupId>org.apache.httpcomponents.client5</groupId>
+			<artifactId>httpclient5</artifactId>
+			<scope>test</scope>
+		</dependency>
 	</dependencies>
 
 	<build>
