@@ -17,14 +17,14 @@ permissions:
   contents: read
 
 jobs:
-  backend:
+  build-and-test:
     name: ${{ matrix.service }} build, test and quality
     runs-on: ubuntu-latest
 
     strategy:
       fail-fast: false
       matrix:
-        service: [backend, auth-service, gateway]
+        service: [auth-service, gateway]
 
     steps:
       - name: Checkout repository

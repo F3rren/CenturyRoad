@@ -21,14 +21,14 @@ permissions:
   security-events: write
 
 jobs:
-  analyze-backend:
+  analyze:
     name: Analyze ${{ matrix.service }}
     runs-on: ubuntu-latest
 
     strategy:
       fail-fast: false
       matrix:
-        service: [backend, auth-service, gateway]
+        service: [auth-service, gateway]
 
     steps:
       - name: Checkout repository

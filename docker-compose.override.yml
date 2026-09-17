@@ -2,18 +2,6 @@
 # Overrides prod targets with hot-reload mounts and dev profiles.
 services:
 
-  backend:
-    build:
-      target: dev
-    environment:
-      SPRING_PROFILES_ACTIVE: dev
-    volumes:
-      - ./service/backend:/app
-      - maven_cache:/root/.m2
-    ports:
-      - "8082:8080"   # gateway owns host 8080; direct access for local debugging
-      - "5005:5005"   # remote debug
-
   auth-service:
     build:
       target: dev
