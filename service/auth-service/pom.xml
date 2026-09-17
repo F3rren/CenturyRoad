@@ -17,6 +17,14 @@
 	<properties>
 		<java.version>21</java.version>
 		<jjwt.version>0.12.6</jjwt.version>
+		<!-- Ahead of the 1.19.8 Spring Boot 3.3.4 manages. That release ships
+		     docker-java 3.3.6, which asks the daemon for Docker API 1.32; recent
+		     Docker Engine and Docker Desktop builds refuse anything that old and
+		     answer 400, which Testcontainers reports as the misleading "Could not
+		     find a valid Docker environment" - so the integration tests fail on an
+		     up-to-date local Docker while older CI runners still accept 1.32 and
+		     pass. Verified: 1.20.4 is still refused, 1.21.4 negotiates fine. -->
+		<testcontainers.version>1.21.4</testcontainers.version>
 	</properties>
 
 	<dependencies>
