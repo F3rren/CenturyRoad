@@ -35,6 +35,18 @@ class LoginAttemptLimiterUnitTest {
     }
 
     @Test
+    void clearDropsTheCountersOfEveryKey() {
+        LoginAttemptLimiter limiter = new LoginAttemptLimiter(1, 60_000L);
+
+        limiter.checkAndRecord("ip|a@test.it");
+        limiter.checkAndRecord("ip|b@test.it");
+        limiter.clear();
+
+        assertThat(limiter.checkAndRecord("ip|a@test.it")).isZero();
+        assertThat(limiter.checkAndRecord("ip|b@test.it")).isZero();
+    }
+
+    @Test
     void resetClearsTheCounter() {
         LoginAttemptLimiter limiter = new LoginAttemptLimiter(1, 60_000L);
 

@@ -49,6 +49,13 @@ public class LoginAttemptLimiter {
         attemptsByKey.remove(key);
     }
 
+    /** Drops every counter at once. This bean is a singleton for the whole application
+     *  context, so an integration test that trips the limiter leaves it tripped for
+     *  whichever test runs next - clearing the database between tests does not undo it. */
+    public void clear() {
+        attemptsByKey.clear();
+    }
+
     private record Attempts(long windowStart, AtomicInteger count) {
     }
 }
