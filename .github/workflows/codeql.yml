@@ -22,8 +22,13 @@ permissions:
 
 jobs:
   analyze-backend:
-    name: Analyze Java code
+    name: Analyze ${{ matrix.service }}
     runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [backend, auth-service, gateway]
 
     steps:
       - name: Checkout repository
@@ -37,7 +42,7 @@ jobs:
           cache: maven
 
       - name: Make Maven Wrapper executable
-        run: cd backend && chmod +x mvnw
+        run: cd service/${{ matrix.service }} && chmod +x mvnw
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
@@ -46,9 +51,9 @@ jobs:
           queries: security-extended
 
       - name: Build project
-        run: cd backend && ./mvnw --batch-mode clean package -DskipTests
+        run: cd service/${{ matrix.service }} && ./mvnw --batch-mode clean package -DskipTests
 
       - name: Analyze code
         uses: github/codeql-action/analyze@v4
         with:
-          category: /language:java
+          category: /language:java-${{ matrix.service }}

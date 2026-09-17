@@ -22,7 +22,7 @@ services:
   # ─── Backend ─────────────────────────────────────────────────────────────────
   backend:
     build:
-      context: ./backend
+      context: ./service/backend
       dockerfile: Dockerfile
       target: prod
     environment:
@@ -31,11 +31,42 @@ services:
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
       JWT_SECRET:                 ${JWT_SECRET}
-    ports:
-      - "8080:8080"
     depends_on:
       db:
         condition: service_healthy
+
+  # ─── Auth service ────────────────────────────────────────────────────────────
+  auth-service:
+    build:
+      context: ./service/auth-service
+      dockerfile: Dockerfile
+      target: prod
+    environment:
+      SPRING_PROFILES_ACTIVE:     prod
+      SPRING_DATASOURCE_URL:      jdbc:postgresql://db:5432/${POSTGRES_DB}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      JWT_SECRET:                 ${JWT_SECRET}
+      JWT_EXPIRATION_MS:          ${JWT_EXPIRATION_MS}
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # ─── Gateway ─────────────────────────────────────────────────────────────────
+  gateway:
+    build:
+      context: ./service/gateway
+      dockerfile: Dockerfile
+      target: prod
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      AUTH_SERVICE_URI:       http://auth-service:8081
+      BACKEND_SERVICE_URI:    http://backend:8080
+    ports:
+      - "8080:8080"
+    depends_on:
+      - backend
+      - auth-service
 
   # ─── Prometheus ──────────────────────────────────────────────────────────────
   prometheus:
@@ -51,6 +82,8 @@ services:
       - "9090:9090"
     depends_on:
       - backend
+      - auth-service
+      - gateway
 
   # ─── Grafana ─────────────────────────────────────────────────────────────────
   grafana:

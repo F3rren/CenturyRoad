@@ -18,8 +18,13 @@ permissions:
 
 jobs:
   backend:
-    name: Backend build, test and quality
+    name: ${{ matrix.service }} build, test and quality
     runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [backend, auth-service, gateway]
 
     steps:
       - name: Checkout repository
@@ -33,25 +38,25 @@ jobs:
           cache: maven
 
       - name: Make Maven Wrapper executable
-        run: cd backend && chmod +x mvnw
+        run: cd service/${{ matrix.service }} && chmod +x mvnw
 
       - name: Build, test and quality checks
-        run: cd backend && ./mvnw --batch-mode --errors --fail-at-end clean verify
+        run: cd service/${{ matrix.service }} && ./mvnw --batch-mode --errors --fail-at-end clean verify
 
       - name: Upload JaCoCo report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: jacoco-report
-          path: backend/target/site/jacoco
+          name: jacoco-report-${{ matrix.service }}
+          path: service/${{ matrix.service }}/target/site/jacoco
           if-no-files-found: ignore
 
       - name: Upload Maven test reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: maven-test-reports
+          name: maven-test-reports-${{ matrix.service }}
           path: |
-            backend/target/surefire-reports
-            backend/target/failsafe-reports
+            service/${{ matrix.service }}/target/surefire-reports
+            service/${{ matrix.service }}/target/failsafe-reports
           if-no-files-found: ignore
