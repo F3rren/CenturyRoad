@@ -65,9 +65,13 @@ public class AuthController {
             throw new InvalidRequestException("Missing password", "La password e' obbligatoria.");
         }
 
-        // Keyed on the caller's address, not on the address a client could forge in a
-        // header: there is no reverse proxy in front of this service yet, so the
-        // connection's own remote address IS the real caller.
+        // Keyed on the caller's address. There are now two proxies in front of this
+        // service - the TLS terminator and the gateway - so the connection's own remote
+        // address is the gateway's, identical for everybody. What makes this the real
+        // caller again is server.forward-headers-strategy in the prod profile, which
+        // has Spring rewrite getRemoteAddr() from X-Forwarded-For; the terminator
+        // overwrites that header rather than passing on what the caller sent, so it
+        // still cannot be forged.
         String limiterKey = httpRequest.getRemoteAddr() + "|" + request.email();
         long retryAfter = loginAttemptLimiter.checkAndRecord(limiterKey);
         if (retryAfter > 0) {

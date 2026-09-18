@@ -1,0 +1,40 @@
+# The only thing on this stack that faces the internet. It terminates TLS and hands
+# plain HTTP to the gateway on the internal compose network, which is why the gateway
+# no longer publishes a port of its own outside of dev.
+#
+# PUBLIC_DOMAIN must resolve to this host before the first start: Caddy obtains and
+# renews the certificate automatically, and a domain that does not resolve yet simply
+# fails the challenge.
+
+{$PUBLIC_DOMAIN} {
+
+	reverse_proxy gateway:8080 {
+		# Set, never append. Caddy's default is to append to whatever the caller sent,
+		# which would let anyone put an address of their choosing at the front of the
+		# list - and the login rate limiter downstream keys on exactly that address.
+		# Overwriting is what makes server.forward-headers-strategy safe to enable.
+		header_up X-Forwarded-For {remote_host}
+		header_up X-Forwarded-Proto {scheme}
+		header_up X-Forwarded-Host {host}
+	}
+
+	header {
+		# HSTS only means anything over HTTPS, which is the only way into this block.
+		# HSTS_MAX_AGE starts deliberately low: a browser that has seen this header
+		# refuses plain HTTP for the whole window, so a broken certificate during the
+		# first rollout would lock people out for as long as max-age says. Raise it to
+		# 31536000 (one year) once HTTPS has been stable for a while.
+		#
+		# "preload" is left out on purpose. It is not just a longer max-age: it asks to
+		# be baked into the browsers themselves, and getting back off that list takes
+		# months. Add it only when every subdomain is permanently HTTPS.
+		Strict-Transport-Security "max-age={$HSTS_MAX_AGE:300}; includeSubDomains"
+
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "no-referrer"
+
+		# Nothing downstream needs to advertise what is running here.
+		-Server
+	}
+}
