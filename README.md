@@ -32,27 +32,53 @@ Grafana are published on the host's loopback only, so the way to them is an SSH 
 - **Java 21**, only if you want to build or run the test suite outside Docker. The Maven
   wrapper (`./mvnw`) is committed, so no separate Maven install is needed.
 
-## Configuration
+## Two environments, two files each
 
-Every variable lives in a single `.env` at the repository root:
+| | Development | Production |
+|---|---|---|
+| Compose file | `compose-dev.yml` | `compose-prod.yml` |
+| Settings and secrets | `.env.dev` | `.env` |
+| Start | `docker compose --env-file .env.dev -f compose-dev.yml up` | `docker compose -f compose-prod.yml up -d` |
+| The API is at | `http://localhost:8080` | `https://<PUBLIC_DOMAIN>` |
+| Ports | fixed in the file | from `.env` |
+| Reverse proxy | none, plain HTTP | Caddy, TLS |
+
+The two share nothing at run time: each has its own settings file, its own project name and
+its own volumes, so a value set for one can never leak into the other. There is no default
+file on purpose. A bare `docker compose up` does nothing but complain, so you always say
+which environment you mean.
+
+### Setting up
+
+Development, once:
+
+```bash
+cp .env.dev.example .env.dev
+```
+
+Fill in the three `change-me` values (`.env.dev.example` says how). These are throwaway
+secrets for your own machine; do not reuse the production ones.
+
+Production, on the server:
 
 ```bash
 cp .env.example .env
 ```
 
-`.env` is gitignored and must never be committed. Fill in at least these before the first
-start:
+Fill in at least these before the first start. `.env` and `.env.dev` are gitignored and must
+never be committed.
 
 | Variable | Why it matters |
 |---|---|
 | `POSTGRES_PASSWORD` | also used by the services to connect |
 | `JWT_SECRET` | see below — the service will not start with a bad one |
 | `GRAFANA_PASSWORD` | the Grafana admin login; sign-up is disabled, so this is the only way in |
+| `GATEWAY_PORT`, `AUTH_PORT` | production only: where the two services listen (see step 3 below) |
 | `FRONTEND_ORIGIN` | exact origin of the frontend, or the browser blocks every call |
 | `WIKIMEDIA_CONTACT` | a URL or address Wikimedia can reach about this client; `history-service` will not start without it |
 | `PUBLIC_DOMAIN` | production only — must already resolve to the host |
 
-`.env.example` documents the rest inline.
+`.env.example` and `.env.dev.example` document the rest inline.
 
 ### Generating `JWT_SECRET`
 
@@ -69,35 +95,59 @@ which is why the command above asks for 48.
 ## Local development
 
 ```bash
-docker compose up
+docker compose --env-file .env.dev -f compose-dev.yml up
 ```
 
-`docker-compose.override.yml` is applied automatically and swaps in the dev image
-targets: hot reload, the `dev` Spring profile, and published ports. Plain HTTP, no proxy.
+Forget `--env-file .env.dev` and Compose stops with a message instead of running on the
+production `.env`: `.env.dev` holds a marker without which `compose-dev.yml` will not start.
+
+Source is mounted into the containers and run with `mvnw`, so edits reload. The first start
+compiles everything and takes a minute or two. Nothing restarts on its own: `mvnw` exits on
+a compile error, and a restart policy would loop it forever instead of leaving the error on
+screen. Plain HTTP, no proxy.
+
+The ports are fixed by `compose-dev.yml`, so no `.env` can move them:
 
 | | URL |
 |---|---|
-| Gateway | http://localhost:8080 |
+| **Gateway** - the one a frontend calls | http://localhost:8080 |
 | auth-service (direct) | http://localhost:8081 |
+| history-service (direct) | http://localhost:8082 |
 | Prometheus | http://localhost:9090 |
 | Grafana | http://localhost:3000 |
-| history-service (direct) | http://localhost:8082 |
-| Postgres | `localhost:5432` (or `DB_PORT`) |
+| Postgres | `localhost:5433` |
 | Remote debug | `5006` auth-service, `5007` gateway, `5008` history-service |
 
-Dev uses the default port numbers and never restarts a container on its own, so a compile
-error stays on screen instead of looping.
+Everything is published on the loopback only. The debug ports accept an unauthenticated
+debugger, which is remote code execution for anyone who can reach them, and this file is
+meant for laptops on any network. Postgres is on 5433 rather than 5432 because a Postgres
+already installed on the machine is common: on Windows Docker does not refuse the port, both
+end up listening, and a client such as psql or DBeaver may reach the wrong database without
+telling you. The services themselves reach the database as `db:5432` inside the Compose
+network, so only tools on your machine care.
+
+`docker compose up` opens nothing by itself: it starts the containers and publishes their
+ports on this machine, and that is all. These are APIs answering JSON, not web pages - the
+frontend is a separate app, run on its own (Vite's dev server, on 5173). To see the backend
+answer, open one of these in a browser:
+
+- http://localhost:8080/actuator/health - is it up
+- http://localhost:8080/api/history/on-this-day/10/16?lang=it - real data
+
+`docker compose --env-file .env.dev -f compose-dev.yml ps` lists what is published, and in
+Docker Desktop each published port in the container list is a link that opens the browser on
+it. Grafana is the one thing here that is a page.
 
 **A frontend calls the gateway**, `http://localhost:8080`, never a service directly. The
 gateway answers the browser's CORS preflight itself, for the one origin in `FRONTEND_ORIGIN`
 (default `http://localhost:5173`, Vite's port). If the frontend runs anywhere else, set that
-variable in `.env` and restart the gateway: an origin that is not listed is refused by the
-browser before the request ever reaches the API, and the symptom looks like a network error.
+variable in `.env.dev` and restart the gateway: an origin that is not listed is refused by
+the browser before the request ever reaches the API, and the symptom looks like a network
+error.
 
-Before the first `docker compose up`, `.env` needs `WIKIMEDIA_CONTACT` (see `.env.example`).
-If something already uses 5432 - a Postgres installed on the machine is the usual one - set
-`DB_PORT` to another number: the services reach the database inside the Compose network, so
-only tools running on your machine care.
+To stop it, `docker compose --env-file .env.dev -f compose-dev.yml down`; add `-v` to wipe
+the development database too. Development and production can run side by side on one
+machine, except that both want Prometheus on 9090 and Grafana on 3000: stop one first.
 
 ## Production deployment
 
@@ -119,10 +169,23 @@ HSTS_MAX_AGE=300
 `https://app.example` and `https://app.example/` are different origins to a browser, and
 the symptom of getting it wrong is a blocked request that looks like a network error.
 
-### 3. Choose the published ports
+### 3. Choose the ports
 
-These four are read from `.env` and default to what dev uses. Change them on the
-production host to whatever you like:
+Two kinds, both read from `.env`.
+
+**The ports the gateway and `auth-service` listen on.** Inside the Compose network only:
+nothing publishes them in production. Set them on the production host:
+
+```
+GATEWAY_PORT=12129
+AUTH_PORT=12130
+```
+
+Those two variables are all there is to change. The proxy, the gateway (which routes to
+`auth-service`), Prometheus and every healthcheck read them, so nothing else needs editing.
+`history-service` stays on 8082.
+
+**The ports published on the host.** Only these, and they move on the host side alone:
 
 ```
 PROMETHEUS_PORT=9090
@@ -131,29 +194,23 @@ PROXY_HTTP_PORT=80
 PROXY_HTTPS_PORT=443
 ```
 
-Only the number on the host moves; the containers keep listening on the same ports
-internally, so nothing else needs to change with them. `PROXY_HTTP_PORT` and
-`PROXY_HTTPS_PORT` are the exception to "pick anything": the certificate challenge always
-arrives on the public 80/443, so leave them alone unless a router or firewall forwards
-those two to the ports you chose.
+`PROXY_HTTP_PORT` and `PROXY_HTTPS_PORT` are the exception to "pick anything": the
+certificate challenge always arrives on the public 80/443, so leave them alone unless a
+router or firewall forwards those two to the ports you chose.
 
-The gateway and `auth-service` have no published port in production, on purpose - see the
-security notes for why the gateway must never be exposed directly.
+Neither the gateway nor `auth-service` is reachable from outside the machine in production,
+whatever port they use - on purpose. See the security notes for why the gateway must never be
+exposed directly: publishing 12129 would put it there.
 
 ### 4. Start the stack
 
 ```bash
-docker compose -f docker-compose.yml --profile proxy up -d
+docker compose -f compose-prod.yml up -d
 ```
 
-Two details, both easy to get wrong:
-
-- **`-f docker-compose.yml` is not optional.** Without it Compose also applies
-  `docker-compose.override.yml` and you silently deploy the development stack — dev image
-  targets, source mounts, debug ports and the `dev` profile.
-- **`--profile proxy`** is what starts the reverse proxy. Without it nothing terminates
-  TLS and nothing is published at all, since the gateway no longer exposes a port of its
-  own in production.
+That is the whole command. The reverse proxy is part of this file, and there is no override
+that could silently swap in the development stack: `compose-dev.yml` is a different file,
+with different settings, that this one never reads.
 
 ### 5. Create the first administrator
 
@@ -331,14 +388,13 @@ metrics would be public.
 
 ## Security notes
 
-- **Postgres is published only in dev.** `docker-compose.override.yml` maps `5432:5432`
-  for local tooling; the production file publishes nothing for the database. Always
-  deploy with `-f docker-compose.yml` - without it the override, and this port, come back.
+- **Postgres is published only in dev**, on the loopback (`localhost:5433`, in
+  `compose-dev.yml`). `compose-prod.yml` publishes nothing for the database.
 - **Prometheus and Grafana are loopback-only.** Prometheus runs with
   `--web.enable-lifecycle` and no authentication, so anyone who could reach its port could
   shut it down. Do not change those bindings to `0.0.0.0` to save an SSH tunnel.
-- **Never commit `.env`.** It holds the JWT signing secret; anyone with it can mint valid
-  tokens for any user.
+- **Never commit `.env` or `.env.dev`.** They hold the JWT signing secret; anyone with it can
+  mint valid tokens for any user. Use different secrets in the two.
 - **`server.forward-headers-strategy` is enabled in the `prod` profile**, so the services
   trust the `X-Forwarded-*` headers they receive. That is safe only because the proxy
   overwrites them rather than passing on what the caller sent. If you ever expose the
