@@ -1,10 +1,19 @@
 # Applied automatically in dev (docker compose up).
-# Overrides prod targets with hot-reload mounts and dev profiles.
+# Overrides prod targets with hot-reload mounts and dev profiles, publishes the default
+# ports, and turns restarts off: mvnw exits on a compile error, and restart: unless-stopped
+# would loop it forever instead of leaving the error where you can read it.
+# Prometheus (9090) and Grafana (3000) are already published on localhost by the base file.
 services:
+
+  db:
+    restart: "no"
+    ports:
+      - "5432:5432"
 
   auth-service:
     build:
       target: dev
+    restart: "no"
     environment:
       SPRING_PROFILES_ACTIVE: dev
     volumes:
@@ -17,6 +26,7 @@ services:
   gateway:
     build:
       target: dev
+    restart: "no"
     environment:
       SPRING_PROFILES_ACTIVE: dev
     volumes:
@@ -25,6 +35,12 @@ services:
     ports:
       - "8080:8080"
       - "5007:5007"   # remote debug
+
+  prometheus:
+    restart: "no"
+
+  grafana:
+    restart: "no"
 
 volumes:
   maven_cache:
