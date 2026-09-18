@@ -38,12 +38,19 @@ updates:
   # The two service images (eclipse-temurin) and the root compose stack (postgis).
   # Prometheus and Grafana are pinned through environment variables in
   # docker-compose.yml, so Dependabot cannot see or update those.
+  #
+  # A new Java major is never taken here. The JDK version has to move everywhere at
+  # once - java.version in both pom.xml files, the Java in ci.yml, and every FROM in both
+  # Dockerfiles - or what CI tests is not what ships. That is a decision, not a bump.
   - package-ecosystem: docker
     directory: "/service/auth-service"
     target-branch: develop
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    ignore:
+      - dependency-name: "eclipse-temurin"
+        update-types: ["version-update:semver-major"]
     groups:
       docker-minor-and-patch:
         update-types:
@@ -56,6 +63,9 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    ignore:
+      - dependency-name: "eclipse-temurin"
+        update-types: ["version-update:semver-major"]
     groups:
       docker-minor-and-patch:
         update-types:
