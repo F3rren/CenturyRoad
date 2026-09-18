@@ -32,6 +32,12 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
       JWT_SECRET:                 ${JWT_SECRET}
       JWT_EXPIRATION_MS:          ${JWT_EXPIRATION_MS}
+      # Creating a user needs an admin token, so an empty database has no way to get
+      # its first administrator without these. Inert unless both are set AND the users
+      # table is empty - see FirstAdminBootstrap. Clear them again after the first
+      # login and restart, or they sit in the container environment for good.
+      BOOTSTRAP_ADMIN_EMAIL:      ${BOOTSTRAP_ADMIN_EMAIL:-}
+      BOOTSTRAP_ADMIN_PASSWORD:   ${BOOTSTRAP_ADMIN_PASSWORD:-}
     depends_on:
       db:
         condition: service_healthy
