@@ -34,6 +34,18 @@ updates:
           - minor
           - patch
 
+  - package-ecosystem: maven
+    directory: "/service/history-service"
+    target-branch: develop
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    groups:
+      maven-minor-and-patch:
+        update-types:
+          - minor
+          - patch
+
   # ---------- Docker ----------
   # The two service images (eclipse-temurin) and the root compose stack (postgis).
   # Prometheus and Grafana are pinned through environment variables in
@@ -59,6 +71,21 @@ updates:
 
   - package-ecosystem: docker
     directory: "/service/gateway"
+    target-branch: develop
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    ignore:
+      - dependency-name: "eclipse-temurin"
+        update-types: ["version-update:semver-major"]
+    groups:
+      docker-minor-and-patch:
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: docker
+    directory: "/service/history-service"
     target-branch: develop
     schedule:
       interval: weekly
