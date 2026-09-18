@@ -50,6 +50,26 @@ services:
       db:
         condition: service_healthy
 
+  # ─── History service ─────────────────────────────────────────────────────────
+  # Historical events for a date, from Wikipedia's On this day feed. Needs no database and no
+  # secret; the one required setting is who Wikimedia can contact about this client, which its
+  # User-Agent policy asks every client to say.
+  history-service:
+    build:
+      context: ./service/history-service
+      dockerfile: Dockerfile
+      target: prod
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      WIKIMEDIA_CONTACT:      ${WIKIMEDIA_CONTACT:?set WIKIMEDIA_CONTACT in .env (a URL or an address Wikimedia can reach)}
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8082/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
   # ─── Gateway ─────────────────────────────────────────────────────────────────
   gateway:
     build:
@@ -60,6 +80,7 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: prod
       AUTH_SERVICE_URI:       http://auth-service:8081
+      HISTORY_SERVICE_URI:    http://history-service:8082
     # No ports here on purpose: in prod the proxy below is the only way in. The dev
     # override republishes 8080 so local work keeps talking to the gateway directly.
     healthcheck:
@@ -70,6 +91,7 @@ services:
       start_period: 60s
     depends_on:
       - auth-service
+      - history-service
 
   # ─── Reverse proxy (TLS termination) ─────────────────────────────────────────
   # Opt-in, so "docker compose up" stays the plain-HTTP dev stack it is today.
@@ -113,6 +135,7 @@ services:
       - "127.0.0.1:${PROMETHEUS_PORT:-9090}:9090"
     depends_on:
       - auth-service
+      - history-service
       - gateway
 
   # ─── Grafana ─────────────────────────────────────────────────────────────────

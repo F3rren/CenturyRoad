@@ -8,6 +8,11 @@ scrape_configs:
     static_configs:
       - targets: ["auth-service:8081"]
 
+  - job_name: century-road-history-service
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["history-service:8082"]
+
   - job_name: century-road-gateway
     metrics_path: /actuator/prometheus
     static_configs:
