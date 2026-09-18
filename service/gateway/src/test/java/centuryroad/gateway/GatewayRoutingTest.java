@@ -88,6 +88,28 @@ class GatewayRoutingTest {
 	}
 
 	@Test
+	void aPreflightFromTheConfiguredOriginIsAllowed() {
+		// The gateway answers the preflight itself, so it never reaches the stub.
+		client().options().uri("/api/auth/login")
+				.header("Origin", "http://localhost:5173")
+				.header("Access-Control-Request-Method", "POST")
+				.exchange()
+				.expectStatus().isOk()
+				.expectHeader().valueEquals("Access-Control-Allow-Origin", "http://localhost:5173");
+	}
+
+	@Test
+	void aPreflightFromAnyOtherOriginIsRefused() {
+		// The property lists origins explicitly rather than "*", and this is the whole
+		// point of that: a site nobody allowed cannot script calls against this API.
+		client().options().uri("/api/auth/login")
+				.header("Origin", "https://non-autorizzato.example")
+				.header("Access-Control-Request-Method", "POST")
+				.exchange()
+				.expectStatus().isForbidden();
+	}
+
+	@Test
 	void thePathReachesTheUpstreamUnmodified() {
 		// auth-service serves its real /api/... paths, so the gateway deliberately has no
 		// path-stripping filter - see the routes comment in application.properties.

@@ -45,10 +45,30 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: prod
       AUTH_SERVICE_URI:       http://auth-service:8081
-    ports:
-      - "8080:8080"
+    # No ports here on purpose: in prod the proxy below is the only way in. The dev
+    # override republishes 8080 so local work keeps talking to the gateway directly.
     depends_on:
       - auth-service
+
+  # ─── Reverse proxy (TLS termination) ─────────────────────────────────────────
+  # Opt-in, so "docker compose up" stays the plain-HTTP dev stack it is today.
+  # Start it with: docker compose --profile proxy up -d
+  proxy:
+    image: caddy:2-alpine
+    profiles: ["proxy"]
+    restart: unless-stopped
+    environment:
+      PUBLIC_DOMAIN: ${PUBLIC_DOMAIN}
+      HSTS_MAX_AGE:  ${HSTS_MAX_AGE:-300}
+    volumes:
+      - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - gateway
 
   # ─── Prometheus ──────────────────────────────────────────────────────────────
   prometheus:
@@ -82,6 +102,8 @@ services:
       - prometheus
 
 volumes:
+  caddy_data:
+  caddy_config:
   postgres_data:
   prometheus_data:
   grafana_data:
