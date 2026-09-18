@@ -16,7 +16,7 @@
 
 	<properties>
 		<java.version>21</java.version>
-		<jjwt.version>0.12.6</jjwt.version>
+		<jjwt.version>0.13.0</jjwt.version>
 		<!-- Ahead of the 1.19.8 Spring Boot 3.3.4 manages. That release ships
 		     docker-java 3.3.6, which asks the daemon for Docker API 1.32; recent
 		     Docker Engine and Docker Desktop builds refuse anything that old and
@@ -26,6 +26,23 @@
 		     pass. Verified: 1.20.4 is still refused, 1.21.4 negotiates fine. -->
 		<testcontainers.version>1.21.4</testcontainers.version>
 	</properties>
+
+	<!-- The testcontainers.version property above only overrides what the Spring Boot
+	     parent manages, and a property no <version> tag references is invisible to
+	     Dependabot: it would never propose a bump, and the pin would silently rot back
+	     into the Docker API problem it was added to fix. Importing the BOM explicitly
+	     attaches the property to a real declaration, so the version stays tracked. -->
+	<dependencyManagement>
+		<dependencies>
+			<dependency>
+				<groupId>org.testcontainers</groupId>
+				<artifactId>testcontainers-bom</artifactId>
+				<version>${testcontainers.version}</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+		</dependencies>
+	</dependencyManagement>
 
 	<dependencies>
 		<!-- Web -->

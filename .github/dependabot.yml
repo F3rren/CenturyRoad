@@ -1,12 +1,26 @@
 version: 2
 
+# Every entry targets develop on purpose: version updates land where the work happens
+# and reach main through the usual release PR. Note that SECURITY updates ignore this
+# and always open against the default branch - that is GitHub's behaviour, not a
+# setting, and the only way to move them is to make develop the default branch.
+#
+# Minor and patch bumps are grouped into one PR per ecosystem. A major is deliberately
+# left on its own: that is the one worth reading before merging.
+
 updates:
+  # ---------- Maven ----------
   - package-ecosystem: maven
     directory: "/service/auth-service"
     target-branch: develop
     schedule:
       interval: weekly
     open-pull-requests-limit: 10
+    groups:
+      maven-minor-and-patch:
+        update-types:
+          - minor
+          - patch
 
   - package-ecosystem: maven
     directory: "/service/gateway"
@@ -14,10 +28,61 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 10
+    groups:
+      maven-minor-and-patch:
+        update-types:
+          - minor
+          - patch
 
+  # ---------- Docker ----------
+  # The two service images (eclipse-temurin) and the root compose stack (postgis).
+  # Prometheus and Grafana are pinned through environment variables in
+  # docker-compose.yml, so Dependabot cannot see or update those.
+  - package-ecosystem: docker
+    directory: "/service/auth-service"
+    target-branch: develop
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      docker-minor-and-patch:
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: docker
+    directory: "/service/gateway"
+    target-branch: develop
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      docker-minor-and-patch:
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: docker
+    directory: "/"
+    target-branch: develop
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      docker-minor-and-patch:
+        update-types:
+          - minor
+          - patch
+
+  # ---------- GitHub Actions ----------
   - package-ecosystem: github-actions
     directory: "/.github/workflows"
     target-branch: develop
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    groups:
+      actions-minor-and-patch:
+        update-types:
+          - minor
+          - patch

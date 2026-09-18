@@ -32,6 +32,12 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
       JWT_SECRET:                 ${JWT_SECRET}
       JWT_EXPIRATION_MS:          ${JWT_EXPIRATION_MS}
+      # Creating a user needs an admin token, so an empty database has no way to get
+      # its first administrator without these. Inert unless both are set AND the users
+      # table is empty - see FirstAdminBootstrap. Clear them again after the first
+      # login and restart, or they sit in the container environment for good.
+      BOOTSTRAP_ADMIN_EMAIL:      ${BOOTSTRAP_ADMIN_EMAIL:-}
+      BOOTSTRAP_ADMIN_PASSWORD:   ${BOOTSTRAP_ADMIN_PASSWORD:-}
     depends_on:
       db:
         condition: service_healthy
@@ -45,10 +51,30 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: prod
       AUTH_SERVICE_URI:       http://auth-service:8081
-    ports:
-      - "8080:8080"
+    # No ports here on purpose: in prod the proxy below is the only way in. The dev
+    # override republishes 8080 so local work keeps talking to the gateway directly.
     depends_on:
       - auth-service
+
+  # ─── Reverse proxy (TLS termination) ─────────────────────────────────────────
+  # Opt-in, so "docker compose up" stays the plain-HTTP dev stack it is today.
+  # Start it with: docker compose --profile proxy up -d
+  proxy:
+    image: caddy:2-alpine
+    profiles: ["proxy"]
+    restart: unless-stopped
+    environment:
+      PUBLIC_DOMAIN: ${PUBLIC_DOMAIN}
+      HSTS_MAX_AGE:  ${HSTS_MAX_AGE:-300}
+    volumes:
+      - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - gateway
 
   # ─── Prometheus ──────────────────────────────────────────────────────────────
   prometheus:
@@ -82,6 +108,8 @@ services:
       - prometheus
 
 volumes:
+  caddy_data:
+  caddy_config:
   postgres_data:
   prometheus_data:
   grafana_data:
