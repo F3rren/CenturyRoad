@@ -11,15 +11,16 @@ browser ──HTTPS──▶ proxy (Caddy) ──HTTP──▶ gateway ──HTT
                    TLS, HSTS               routing, CORS     identity
 ```
 
-Only the proxy is published in production. The gateway and `auth-service` talk over the
-internal Compose network and are not reachable from outside.
+Only the proxy is public in production. The gateway, `auth-service` and Postgres talk
+over the internal Compose network and are not reachable from outside. Prometheus and
+Grafana are published on the host's loopback only, so the way to them is an SSH tunnel.
 
 | Path | Served by |
 |---|---|
 | `/api/auth/**` | login, token refresh, logout |
 | `/api/me/**` | the caller's own profile |
 | `/api/admin/users/**` | user administration, admin only |
-| `/actuator/health`, `/actuator/prometheus` | monitoring |
+| `/actuator/health` | liveness, public. Every other `/actuator/*` path is a 404 at the proxy |
 
 ## Prerequisites
 
@@ -75,7 +76,11 @@ targets: hot reload, the `dev` Spring profile, and published ports. Plain HTTP, 
 | auth-service (direct) | http://localhost:8081 |
 | Prometheus | http://localhost:9090 |
 | Grafana | http://localhost:3000 |
+| Postgres | `localhost:5432` |
 | Remote debug | `5006` auth-service, `5007` gateway |
+
+Dev uses the default port numbers and never restarts a container on its own, so a compile
+error stays on screen instead of looping.
 
 ## Production deployment
 
@@ -97,7 +102,28 @@ HSTS_MAX_AGE=300
 `https://app.example` and `https://app.example/` are different origins to a browser, and
 the symptom of getting it wrong is a blocked request that looks like a network error.
 
-### 3. Start the stack
+### 3. Choose the published ports
+
+These four are read from `.env` and default to what dev uses. Change them on the
+production host to whatever you like:
+
+```
+PROMETHEUS_PORT=9090
+GRAFANA_PORT=3000
+PROXY_HTTP_PORT=80
+PROXY_HTTPS_PORT=443
+```
+
+Only the number on the host moves; the containers keep listening on the same ports
+internally, so nothing else needs to change with them. `PROXY_HTTP_PORT` and
+`PROXY_HTTPS_PORT` are the exception to "pick anything": the certificate challenge always
+arrives on the public 80/443, so leave them alone unless a router or firewall forwards
+those two to the ports you chose.
+
+The gateway and `auth-service` have no published port in production, on purpose - see the
+security notes for why the gateway must never be exposed directly.
+
+### 4. Start the stack
 
 ```bash
 docker compose -f docker-compose.yml --profile proxy up -d
@@ -112,11 +138,11 @@ Two details, both easy to get wrong:
   TLS and nothing is published at all, since the gateway no longer exposes a port of its
   own in production.
 
-### 4. Create the first administrator
+### 5. Create the first administrator
 
 See the section below. Do this before handing the API to anyone.
 
-### 5. Verify TLS and HSTS
+### 6. Verify TLS and HSTS
 
 ```bash
 curl -sI https://$PUBLIC_DOMAIN/actuator/health | grep -i strict-transport
@@ -128,7 +154,7 @@ If the header is missing, the request did not reach the proxy over HTTPS, or the
 not running. HSTS is only ever emitted on an HTTPS request — that is deliberate, not a
 bug.
 
-### 6. Only later, raise the HSTS window
+### 7. Only later, raise the HSTS window
 
 Once HTTPS has been stable for a few days, set `HSTS_MAX_AGE=31536000` (one year) and
 restart the proxy.
@@ -192,14 +218,30 @@ The gateway suite needs no Docker: it stubs its upstream in-process.
 ## Observability
 
 Both services expose `/actuator/health` and `/actuator/prometheus`. Prometheus scrapes
-them and Grafana is provisioned with it as a datasource, so the dashboards come up with
-no manual wiring. Configuration lives under `infra/`.
+them over the internal network and Grafana is provisioned with it as a datasource, so the
+datasource comes up with no manual wiring. Configuration lives under `infra/`.
+
+In production Prometheus and Grafana listen on the host's loopback only. From your
+machine, open a tunnel and use them as if they were local:
+
+```bash
+ssh -L 3000:localhost:<GRAFANA_PORT> -L 9090:localhost:<PROMETHEUS_PORT> user@your-server
+```
+
+Then Grafana is at http://localhost:3000 and Prometheus at http://localhost:9090.
+
+The proxy serves `/actuator/health` and answers 404 to every other `/actuator/*` path.
+The gateway shares its port between the API and its actuator, so without that filter the
+metrics would be public.
 
 ## Security notes
 
-- **The database port is published.** `docker-compose.yml` maps `5432:5432`, which is
-  convenient locally but exposes Postgres on the host in production. Remove that mapping,
-  or restrict it at the firewall, on any machine reachable from outside.
+- **Postgres is published only in dev.** `docker-compose.override.yml` maps `5432:5432`
+  for local tooling; the production file publishes nothing for the database. Always
+  deploy with `-f docker-compose.yml` - without it the override, and this port, come back.
+- **Prometheus and Grafana are loopback-only.** Prometheus runs with
+  `--web.enable-lifecycle` and no authentication, so anyone who could reach its port could
+  shut it down. Do not change those bindings to `0.0.0.0` to save an SSH tunnel.
 - **Never commit `.env`.** It holds the JWT signing secret; anyone with it can mint valid
   tokens for any user.
 - **`server.forward-headers-strategy` is enabled in the `prod` profile**, so the services
