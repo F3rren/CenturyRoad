@@ -82,11 +82,22 @@ targets: hot reload, the `dev` Spring profile, and published ports. Plain HTTP, 
 | Prometheus | http://localhost:9090 |
 | Grafana | http://localhost:3000 |
 | history-service (direct) | http://localhost:8082 |
-| Postgres | `localhost:5432` |
+| Postgres | `localhost:5432` (or `DB_PORT`) |
 | Remote debug | `5006` auth-service, `5007` gateway, `5008` history-service |
 
 Dev uses the default port numbers and never restarts a container on its own, so a compile
 error stays on screen instead of looping.
+
+**A frontend calls the gateway**, `http://localhost:8080`, never a service directly. The
+gateway answers the browser's CORS preflight itself, for the one origin in `FRONTEND_ORIGIN`
+(default `http://localhost:5173`, Vite's port). If the frontend runs anywhere else, set that
+variable in `.env` and restart the gateway: an origin that is not listed is refused by the
+browser before the request ever reaches the API, and the symptom looks like a network error.
+
+Before the first `docker compose up`, `.env` needs `WIKIMEDIA_CONTACT` (see `.env.example`).
+If something already uses 5432 - a Postgres installed on the machine is the usual one - set
+`DB_PORT` to another number: the services reach the database inside the Compose network, so
+only tools running on your machine care.
 
 ## Production deployment
 
