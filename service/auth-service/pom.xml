@@ -24,7 +24,7 @@
 		     find a valid Docker environment" - so the integration tests fail on an
 		     up-to-date local Docker while older CI runners still accept 1.32 and
 		     pass. Verified: 1.20.4 is still refused, 1.21.4 negotiates fine. -->
-		<testcontainers.version>1.21.4</testcontainers.version>
+		<testcontainers.version>2.0.5</testcontainers.version>
 	</properties>
 
 	<!-- The testcontainers.version property above only overrides what the Spring Boot
