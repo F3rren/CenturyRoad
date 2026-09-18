@@ -7,8 +7,11 @@ services:
 
   db:
     restart: "no"
+    # Host side only, for psql and friends: the services reach it as db:5432 whatever this
+    # says. Configurable because a Postgres already installed on the machine is common, and
+    # a published port that is taken stops the whole stack, not just this container.
     ports:
-      - "5432:5432"
+      - "${DB_PORT:-5432}:5432"
 
   auth-service:
     build:
