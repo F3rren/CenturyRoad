@@ -22,7 +22,7 @@
 	}
 
 	handle {
-		reverse_proxy gateway:8080 {
+		reverse_proxy gateway:{$GATEWAY_PORT:8080} {
 			# Set, never append. Caddy's default is to append to whatever the caller sent,
 			# which would let anyone put an address of their choosing at the front of the
 			# list - and the login rate limiter downstream keys on exactly that address.

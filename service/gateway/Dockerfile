@@ -23,5 +23,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf 
   && useradd --system --uid 10001 --no-create-home app
 COPY --from=build --chown=app:app /app/target/*.jar app.jar
 USER app
+# Documents the default only: the port actually used is GATEWAY_PORT, which Compose passes in.
 EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "-Dspring.profiles.active=prod", "app.jar"]

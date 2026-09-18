@@ -1,8 +1,19 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# PRODUCTION.  Start it with:
+#
+#     docker compose -f compose-prod.yml up -d
+#
+# Secrets and ports all come from .env (see .env.example). Nothing is published except the
+# reverse proxy (80/443) and Prometheus/Grafana on the host's loopback.
+#
+# Not for local development: that is compose-dev.yml, which reads .env.dev instead.
+# The two files share nothing at run time, so an edit to one never changes the other.
+# ═══════════════════════════════════════════════════════════════════════════════
 services:
 
   # ─── Database ────────────────────────────────────────────────────────────────
   # No ports here on purpose: nothing outside the Compose network has a reason to talk
-  # to Postgres in production. The dev override publishes 5432 for local tooling.
+  # to Postgres in production.
   db:
     image: postgis/postgis:16-3.4-alpine
     restart: unless-stopped
@@ -29,6 +40,10 @@ services:
     restart: unless-stopped
     environment:
       SPRING_PROFILES_ACTIVE:     prod
+      # The port it listens on inside the Compose network. Everything that talks to it (the
+      # gateway, Prometheus, the healthcheck below) reads the same variable, so it is set in
+      # .env and nowhere else.
+      AUTH_PORT:                  ${AUTH_PORT:?set AUTH_PORT in .env}
       SPRING_DATASOURCE_URL:      jdbc:postgresql://db:5432/${POSTGRES_DB}
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
@@ -41,7 +56,7 @@ services:
       BOOTSTRAP_ADMIN_EMAIL:      ${BOOTSTRAP_ADMIN_EMAIL:-}
       BOOTSTRAP_ADMIN_PASSWORD:   ${BOOTSTRAP_ADMIN_PASSWORD:-}
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8081/actuator/health"]
+      test: ["CMD", "curl", "-fsS", "http://localhost:${AUTH_PORT}/actuator/health"]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -71,6 +86,8 @@ services:
       start_period: 60s
 
   # ─── Gateway ─────────────────────────────────────────────────────────────────
+  # No ports here on purpose: the proxy below is the only way in. Publishing the gateway
+  # would break the login rate limiter - see the security notes in the README.
   gateway:
     build:
       context: ./service/gateway
@@ -79,15 +96,15 @@ services:
     restart: unless-stopped
     environment:
       SPRING_PROFILES_ACTIVE: prod
-      AUTH_SERVICE_URI:       http://auth-service:8081
+      GATEWAY_PORT:           ${GATEWAY_PORT:?set GATEWAY_PORT in .env}
+      AUTH_SERVICE_URI:       http://auth-service:${AUTH_PORT:?set AUTH_PORT in .env}
       HISTORY_SERVICE_URI:    http://history-service:8082
-      # Without this line the value in .env never reaches the container, and the gateway
-      # keeps answering CORS preflights for the default origin only. Vite's default port.
-      FRONTEND_ORIGIN:        ${FRONTEND_ORIGIN:-http://localhost:5173}
-    # No ports here on purpose: in prod the proxy below is the only way in. The dev
-    # override republishes 8080 so local work keeps talking to the gateway directly.
+      # The exact origin the frontend is served from. Without it the gateway answers CORS
+      # preflights for the default (http://localhost:5173) only, and a real frontend is
+      # refused by the browser before it reaches the API.
+      FRONTEND_ORIGIN:        ${FRONTEND_ORIGIN:?set FRONTEND_ORIGIN in .env (the frontend's real origin)}
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8080/actuator/health"]
+      test: ["CMD", "curl", "-fsS", "http://localhost:${GATEWAY_PORT}/actuator/health"]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -97,15 +114,15 @@ services:
       - history-service
 
   # ─── Reverse proxy (TLS termination) ─────────────────────────────────────────
-  # Opt-in, so "docker compose up" stays the plain-HTTP dev stack it is today.
-  # Start it with: docker compose --profile proxy up -d
+  # The only thing here that faces the internet. It needs PUBLIC_DOMAIN to resolve to this
+  # host before the first start, or it cannot obtain a certificate.
   proxy:
     image: caddy:2-alpine
-    profiles: ["proxy"]
     restart: unless-stopped
     environment:
-      PUBLIC_DOMAIN: ${PUBLIC_DOMAIN}
+      PUBLIC_DOMAIN: ${PUBLIC_DOMAIN:?set PUBLIC_DOMAIN in .env}
       HSTS_MAX_AGE:  ${HSTS_MAX_AGE:-300}
+      GATEWAY_PORT:  ${GATEWAY_PORT:?set GATEWAY_PORT in .env}
     volumes:
       - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
@@ -124,14 +141,32 @@ services:
   # Published on the host's loopback only: --web.enable-lifecycle plus no authentication
   # means anyone who can reach this port can reload or shut Prometheus down. From
   # another machine, go through an SSH tunnel (see README).
+  #
+  # The version is written here, not in .env, so Dependabot can see it and propose bumps.
   prometheus:
-    image: prom/prometheus:${PROMETHEUS_VERSION}
+    image: prom/prometheus:v2.53.0
     restart: unless-stopped
+    environment:
+      AUTH_PORT:    ${AUTH_PORT:?set AUTH_PORT in .env}
+      GATEWAY_PORT: ${GATEWAY_PORT:?set GATEWAY_PORT in .env}
     volumes:
-      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infra/prometheus/prometheus.yml.tpl:/etc/prometheus/prometheus.yml.tpl:ro
       - prometheus_data:/prometheus
+    # Prometheus cannot read environment variables in its own configuration, and the ports it
+    # scrapes are configurable, so the file is a template: this fills in the two ports and
+    # then starts Prometheus as the image would have (exec, so it is PID 1 and gets signals).
+    # The "prometheus" after the script is $0; the flags below become "$@".
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -e
+        sed -e "s/@AUTH_PORT@/$${AUTH_PORT}/g" /etc/prometheus/prometheus.yml.tpl > /tmp/step1.yml
+        sed -e "s/@GATEWAY_PORT@/$${GATEWAY_PORT}/g" /tmp/step1.yml > /tmp/prometheus.yml
+        exec /bin/prometheus "$$@"
+      - prometheus
     command:
-      - --config.file=/etc/prometheus/prometheus.yml
+      - --config.file=/tmp/prometheus.yml
       - --storage.tsdb.path=/prometheus
       - --web.enable-lifecycle
     ports:
@@ -145,7 +180,7 @@ services:
   # Loopback only, same reasoning as Prometheus: the admin password is the single thing
   # standing between the internet and the dashboards.
   grafana:
-    image: grafana/grafana:${GRAFANA_VERSION}
+    image: grafana/grafana:11.1.0
     restart: unless-stopped
     environment:
       GF_SECURITY_ADMIN_USER:     ${GRAFANA_USER}
