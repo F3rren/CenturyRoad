@@ -81,6 +81,9 @@ services:
       SPRING_PROFILES_ACTIVE: prod
       AUTH_SERVICE_URI:       http://auth-service:8081
       HISTORY_SERVICE_URI:    http://history-service:8082
+      # Without this line the value in .env never reaches the container, and the gateway
+      # keeps answering CORS preflights for the default origin only. Vite's default port.
+      FRONTEND_ORIGIN:        ${FRONTEND_ORIGIN:-http://localhost:5173}
     # No ports here on purpose: in prod the proxy below is the only way in. The dev
     # override republishes 8080 so local work keeps talking to the gateway directly.
     healthcheck:
