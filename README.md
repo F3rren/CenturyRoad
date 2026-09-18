@@ -1,17 +1,20 @@
 # Century Road — Backend
 
-Two Spring Boot services behind an API gateway. `auth-service` owns identity: users,
-login, and the JWTs every other service will eventually verify. `gateway` is the single
-entry point and routes to it. In production a reverse proxy sits in front of both and
-terminates TLS.
+Three Spring Boot services behind an API gateway. `auth-service` owns identity: users,
+login, and the JWTs every other service will eventually verify. `history-service` answers
+"what happened on this date", from Wikipedia. `gateway` is the single entry point and
+routes to both. In production a reverse proxy sits in front and terminates TLS.
 
 ```
-browser ──HTTPS──▶ proxy (Caddy) ──HTTP──▶ gateway ──HTTP──▶ auth-service ──▶ postgres
-                   :443                    :8080             :8081             :5432
-                   TLS, HSTS               routing, CORS     identity
+browser ──HTTPS──▶ proxy (Caddy) ──HTTP──▶ gateway ─┬─HTTP─▶ auth-service ────▶ postgres
+                   :443                    :8080    │        :8081               :5432
+                   TLS, HSTS               routing, │        identity
+                                           CORS     │
+                                                    └─HTTP─▶ history-service ─▶ Wikipedia
+                                                             :8082              (HTTPS, cached)
 ```
 
-Only the proxy is public in production. The gateway, `auth-service` and Postgres talk
+Only the proxy is public in production. The gateway, the services and Postgres talk
 over the internal Compose network and are not reachable from outside. Prometheus and
 Grafana are published on the host's loopback only, so the way to them is an SSH tunnel.
 
@@ -20,6 +23,7 @@ Grafana are published on the host's loopback only, so the way to them is an SSH 
 | `/api/auth/**` | login, token refresh, logout |
 | `/api/me/**` | the caller's own profile |
 | `/api/admin/users/**` | user administration, admin only |
+| `/api/history/**` | [historical events for a date](#history-api), public |
 | `/actuator/health` | liveness, public. Every other `/actuator/*` path is a 404 at the proxy |
 
 ## Prerequisites
@@ -45,6 +49,7 @@ start:
 | `JWT_SECRET` | see below — the service will not start with a bad one |
 | `GRAFANA_PASSWORD` | the Grafana admin login; sign-up is disabled, so this is the only way in |
 | `FRONTEND_ORIGIN` | exact origin of the frontend, or the browser blocks every call |
+| `WIKIMEDIA_CONTACT` | a URL or address Wikimedia can reach about this client; `history-service` will not start without it |
 | `PUBLIC_DOMAIN` | production only — must already resolve to the host |
 
 `.env.example` documents the rest inline.
@@ -76,8 +81,9 @@ targets: hot reload, the `dev` Spring profile, and published ports. Plain HTTP, 
 | auth-service (direct) | http://localhost:8081 |
 | Prometheus | http://localhost:9090 |
 | Grafana | http://localhost:3000 |
+| history-service (direct) | http://localhost:8082 |
 | Postgres | `localhost:5432` |
-| Remote debug | `5006` auth-service, `5007` gateway |
+| Remote debug | `5006` auth-service, `5007` gateway, `5008` history-service |
 
 Dev uses the default port numbers and never restarts a container on its own, so a compile
 error stays on screen instead of looping.
@@ -196,11 +202,82 @@ first administrator on its own. `FirstAdminBootstrap` exists for exactly that ga
    so leaving them set keeps a password readable by anyone who can inspect the container,
    for no further benefit — the mechanism will not fire again anyway.
 
+## History API
+
+`GET /api/history/on-this-day/{month}/{day}` returns what happened on a calendar day, from
+Wikipedia's "On this day" feed. Public: no token, nothing per-user in it.
+
+| Parameter | Meaning | Default |
+|---|---|---|
+| `month`, `day` (path) | any real date; `2/29` is valid, `2/30` is a 400 | required |
+| `lang` | `it` or `en` | `it` |
+| `types` | any of `selected`, `events`, `births`, `deaths`, `holidays`; comma-separated or repeated | all five |
+| `year` | one year; negative for before the common era (`-44`) | none |
+| `fromYear`, `toYear` | an inclusive range, either end optional; not combinable with `year` | none |
+
+```bash
+curl 'https://<host>/api/history/on-this-day/10/16?lang=it&types=events,births&fromYear=1900'
+```
+
+The answer is the usual envelope. `data.sections.<type>` holds `items` (each with `text`,
+`year`, and `pages` linking to the Wikipedia article) plus three fields about where they
+came from:
+
+- `language`: the edition that really supplied the items. It is not always the one asked
+  for: **the Italian feed has no births or deaths at all**, so those come from English,
+  with `fallback: true`. A frontend should say so rather than pass English off as Italian.
+- `stale`: the copy is older than six hours because Wikipedia could not be reached to
+  refresh it. Old history is served in preference to an error, for up to seven days.
+- `data.warnings`: `PRIMARY_UNAVAILABLE` (the language asked for could not be fetched, all
+  sections are from the fallback) or `FALLBACK_UNAVAILABLE` (a gap could not be filled).
+
+The year filter is applied here, not by Wikipedia, which cannot filter by year, so it
+narrows a single day; it cannot answer "everything that happened in 1789". Holidays have no
+year and are left out once a year filter is set.
+
+| Status | `error` | Meaning |
+|---|---|---|
+| 400 | `INVALID_DATE`, `UNSUPPORTED_LANGUAGE`, `INVALID_TYPE`, `INVALID_YEAR`, `BAD_REQUEST` | the request cannot be answered; nothing was asked of Wikipedia |
+| 503 | `UPSTREAM_UNAVAILABLE` | Wikipedia unreachable, and no copy and no other language to fall back on |
+| 503 | `UPSTREAM_RATE_LIMITED` | Wikipedia asked us to slow down; `Retry-After` says for how long |
+| 502 | `UPSTREAM_BAD_RESPONSE` | Wikipedia answered with something unusable, e.g. the API has changed |
+
+### Being a good neighbour to Wikipedia
+
+Wikipedia is a shared resource with rules, and this service follows them:
+
+- **It says who it is.** Every request carries a `User-Agent` naming the client and
+  `WIKIMEDIA_CONTACT`. Wikimedia's policy asks for exactly that, and blocks clients that do
+  not, without notice.
+- **It asks rarely.** One entry per language and day, kept six hours. The load on Wikipedia
+  depends on how many *different* days are looked at, not on how many people call: at most
+  one request per language and day every six hours, and a hundred simultaneous callers for
+  the same day cost one request.
+- **It asks gently.** At most three requests in flight, gzip on, one retry for a transient
+  failure, and a circuit breaker that leaves Wikipedia alone after a run of errors.
+- **It backs off when told to.** After a 429 nothing is sent for as long as `Retry-After`
+  says, and callers are answered from cache or the other language in the meantime.
+- **It never follows a redirect**, and the language is a fixed list, so what it contacts is
+  never decided by a caller or by a response.
+
+### Licence: what you must show
+
+Wikipedia's text is **CC BY-SA 4.0**. Whatever shows it must credit Wikipedia, link the
+article, and name the licence. The response carries all three: `data.attribution`
+(source, licence, licence URL, a ready notice) and, per entry, `pages[].url`. Show them.
+
+Images are not covered by that licence: each file has its own. The service therefore
+forwards only images hosted on Wikimedia Commons, which accepts only free files, and gives
+each a `filePageUrl` naming its author and licence. Images uploaded to a single wiki, where
+non-free "fair use" pictures live, are dropped, because nothing in Wikipedia's answer says
+which are which.
+
 ## Tests
 
 ```bash
-cd service/auth-service && ./mvnw test    # 57 tests
-cd service/gateway      && ./mvnw test    #  9 tests
+cd service/auth-service    && ./mvnw test    #  57 tests
+cd service/gateway         && ./mvnw test    #  14 tests
+cd service/history-service && ./mvnw test    # 181 tests
 ```
 
 `auth-service` runs its integration tests against a real PostgreSQL started through
@@ -213,11 +290,13 @@ or when the daemon rejects the API version the client asks for. When it shows up
 `Attempted configurations were:` block just above it — it names the real reason for each
 strategy that was tried.
 
-The gateway suite needs no Docker: it stubs its upstream in-process.
+The gateway suite needs no Docker: it stubs its upstream in-process. So does
+`history-service`: its tests talk to a stand-in for Wikipedia on a local port and never
+reach the real one.
 
 ## Observability
 
-Both services expose `/actuator/health` and `/actuator/prometheus`. Prometheus scrapes
+Every service exposes `/actuator/health` and `/actuator/prometheus`. Prometheus scrapes
 them over the internal network and Grafana is provisioned with it as a datasource, so the
 datasource comes up with no manual wiring. Configuration lives under `infra/`.
 
@@ -229,6 +308,11 @@ ssh -L 3000:localhost:<GRAFANA_PORT> -L 9090:localhost:<PROMETHEUS_PORT> user@yo
 ```
 
 Then Grafana is at http://localhost:3000 and Prometheus at http://localhost:9090.
+
+`history-service` adds a few metrics of its own: `history_upstream_requests_seconds` (Wikipedia
+calls by outcome: `ok`, `rate_limited`, `unavailable`, `bad_response`), `history_stale_served_total`,
+`history_fallback_total`, and the cache and circuit-breaker gauges. A rising `bad_response` means
+the integration is broken, not the network.
 
 The proxy serves `/actuator/health` and answers 404 to every other `/actuator/*` path.
 The gateway shares its port between the API and its actuator, so without that filter the
