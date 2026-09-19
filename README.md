@@ -400,6 +400,34 @@ provider's backup option for the whole machine, or `rclone` to object storage), 
 script does not. And a backup nobody has restored is a guess: try the restore above on a scratch
 copy before you need it.
 
+## Container images
+
+For a platform that runs ready-made images rather than a Compose file, CI publishes the three
+application services to GitHub Container Registry, on every push to `main` or `develop`, and only
+once the tests of all three have passed:
+
+```
+ghcr.io/f3rren/century-road-backend-auth-service
+ghcr.io/f3rren/century-road-backend-gateway
+ghcr.io/f3rren/century-road-backend-history-service
+```
+
+Every image carries two tags: the short commit id (`:1a2b3c4`), which never moves and is the one
+to pin, and a moving one, `:latest` for what is on `main` and `:develop` for `develop`. They are
+built from `compose-prod.yml` (`target: prod`, the non-root runtime stage), so a published image
+is the one the production stack would have built itself.
+
+The packages inherit the repository's visibility, so on a public repository they can be pulled
+without credentials. Check the package's visibility after the first run: a private one needs a
+token to pull. Nothing else is published. Postgres, Caddy, Prometheus and Grafana are stock
+images that `compose-prod.yml` pulls as they are.
+
+To build the same images by hand:
+
+```bash
+docker buildx bake -f compose-prod.yml --load     # tagged ...-gateway:local, and so on
+```
+
 ## History API
 
 `GET /api/history/on-this-day/{month}/{day}` returns what happened on a calendar day, from

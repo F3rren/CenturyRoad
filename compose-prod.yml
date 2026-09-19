@@ -8,6 +8,12 @@
 #
 # Not for local development: that is compose-dev.yml, which reads .env.dev instead.
 # The two files share nothing at run time, so an edit to one never changes the other.
+#
+# The three application services name their image next to the build: section. Compose builds
+# them under that name, and CI builds and pushes this same definition to GHCR (the
+# publish-images job in .github/workflows/ci.yml), so a platform that runs ready-made images
+# can pull what CI verified instead of building anything. IMAGE_PREFIX and IMAGE_TAG are set
+# by CI only; on a machine they fall back to a ":local" tag, which is never a published one.
 # ═══════════════════════════════════════════════════════════════════════════════
 services:
 
@@ -33,6 +39,7 @@ services:
 
   # ─── Auth service ────────────────────────────────────────────────────────────
   auth-service:
+    image: ${IMAGE_PREFIX:-ghcr.io/f3rren/century-road-backend}-auth-service:${IMAGE_TAG:-local}
     build:
       context: ./service/auth-service
       dockerfile: Dockerfile
@@ -70,6 +77,7 @@ services:
   # secret; the one required setting is who Wikimedia can contact about this client, which its
   # User-Agent policy asks every client to say.
   history-service:
+    image: ${IMAGE_PREFIX:-ghcr.io/f3rren/century-road-backend}-history-service:${IMAGE_TAG:-local}
     build:
       context: ./service/history-service
       dockerfile: Dockerfile
@@ -89,6 +97,7 @@ services:
   # No ports here on purpose: the proxy below is the only way in. Publishing the gateway
   # would break the login rate limiter - see the security notes in the README.
   gateway:
+    image: ${IMAGE_PREFIX:-ghcr.io/f3rren/century-road-backend}-gateway:${IMAGE_TAG:-local}
     build:
       context: ./service/gateway
       dockerfile: Dockerfile
